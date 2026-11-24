@@ -662,3 +662,5 @@ function jsonResponse(obj) {
     ContentService.MimeType.JSON
   );
 }
+
+yes
