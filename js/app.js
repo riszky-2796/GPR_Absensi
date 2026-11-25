@@ -828,7 +828,8 @@ function bindEvents() {
       return;
     }
 
-    const absenCell = target.closest('.absen-cell');
+    // Dibatasi ketat hanya untuk sel di dalam tab Absensi (#view-absensi)
+    const absenCell = target.closest('#view-absensi .absen-cell');
     if (absenCell) {
       const studentId = absenCell.dataset.studentId;
       const date = absenCell.dataset.date;
@@ -974,7 +975,7 @@ function bindEvents() {
   });
 
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('.absen-cell') && !e.target.closest('.popover-menu')) {
+    if (!e.target.closest('#view-absensi .absen-cell') && !e.target.closest('.popover-menu')) {
       closePopover();
     }
   });
