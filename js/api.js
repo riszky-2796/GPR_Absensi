@@ -45,6 +45,7 @@ async function postGas(action, payload = {}) {
 }
 
 export const api = {
+  // Absensi (V1)
   getBootstrap: () => postGas('getBootstrap'),
   getMonthData: (month_key) => postGas('getMonthData', { month_key }),
   saveSettings: (payload) => postGas('saveSettings', payload),
@@ -59,4 +60,11 @@ export const api = {
   saveSchedule: (payload) => postGas('saveSchedule', payload),
   batchSaveAttendance: (month_key, changes) =>
     postGas('batchSaveAttendance', { month_key, changes }),
+
+  // Kas (V2)
+  getKasData: () => postGas('getKasData'),
+  saveKasSettings: (payload) => postGas('saveKasSettings', payload),
+  toggleKasIuran: (payload) => postGas('toggleKasIuran', payload),
+  saveKasTransaction: (payload) => postGas('saveKasTransaction', payload),
+  deleteKasTransaction: (tx_id) => postGas('deleteKasTransaction', { tx_id }),
 };

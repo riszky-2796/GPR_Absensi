@@ -39,6 +39,35 @@ import { STORAGE_KEYS } from './config.js';
  * @property {string} status
  */
 
+/**
+ * @typedef {Object} KasSettings
+ * @property {string} title
+ * @property {number} fee_amount
+ * @property {string[]} categories_in
+ * @property {string[]} categories_out
+ */
+
+/**
+ * @typedef {Object} KasIuranRecord
+ * @property {string} iuran_key
+ * @property {string} student_id
+ * @property {string} month_key
+ * @property {number} amount
+ * @property {string} paid_at
+ */
+
+/**
+ * @typedef {Object} KasTransaction
+ * @property {string} tx_id
+ * @property {'in' | 'out'} type
+ * @property {number} amount
+ * @property {string} title
+ * @property {string} category
+ * @property {string} date
+ * @property {string} note
+ * @property {string} created_at
+ */
+
 /** @returns {string} Format YYYY-MM bulan berjalan */
 export function getCurrentMonthKey() {
   const now = new Date();
@@ -73,6 +102,29 @@ export const state = {
   loadedMonths: {},
   /** @type {Map<string, PendingAttendanceChange>} */
   pendingQueue: new Map(),
+
+  // State Modul Kas (V2)
+  kas: {
+    loaded: false,
+    /** @type {'dashboard' | 'iuran' | 'form' | 'laporan'} */
+    subView: 'dashboard',
+    /** @type {'in' | 'out'} */
+    formType: 'in',
+    /** @type {string | null} */
+    editTxId: null,
+    activeYear: new Date().getFullYear(),
+    /** @type {KasSettings} */
+    settings: {
+      title: 'Iuran Kas Bulanan',
+      fee_amount: 20000,
+      categories_in: ['Donasi & Sukarela', 'Sisa Kegiatan', 'Lainnya'],
+      categories_out: ['Konsumsi', 'Perlengkapan', 'Kegiatan', 'Lainnya'],
+    },
+    /** @type {KasIuranRecord[]} */
+    iuran: [],
+    /** @type {KasTransaction[]} */
+    transactions: [],
+  },
 };
 
 /** @param {string} tab */
@@ -125,6 +177,28 @@ export function setMonthData(monthKey, data) {
 
   state.attendanceByMonth[monthKey] = map;
   state.loadedMonths[monthKey] = true;
+}
+
+/**
+ * Memuat data modul Kas dari endpoint getKasData.
+ * @param {{ kasSettings: KasSettings, iuran: KasIuranRecord[], transactions: KasTransaction[] }} data
+ */
+export function setKasData(data) {
+  if (data.kasSettings) {
+    state.kas.settings = {
+      title: data.kasSettings.title || 'Iuran Kas Bulanan',
+      fee_amount: Number(data.kasSettings.fee_amount) || 20000,
+      categories_in: Array.isArray(data.kasSettings.categories_in)
+        ? data.kasSettings.categories_in
+        : ['Donasi & Sukarela', 'Sisa Kegiatan', 'Lainnya'],
+      categories_out: Array.isArray(data.kasSettings.categories_out)
+        ? data.kasSettings.categories_out
+        : ['Konsumsi', 'Perlengkapan', 'Kegiatan', 'Lainnya'],
+    };
+  }
+  state.kas.iuran = Array.isArray(data.iuran) ? data.iuran : [];
+  state.kas.transactions = Array.isArray(data.transactions) ? data.transactions : [];
+  state.kas.loaded = true;
 }
 
 /**

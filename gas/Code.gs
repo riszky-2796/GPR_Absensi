@@ -1,7 +1,6 @@
 /**
- * GPR Absensi — Backend API (Google Apps Script)
- * Database : Google Sheets (6 Tab)
- * Auth     : PIN disimpan di Project Settings > Script Properties dengan key "APP_PIN"
+ * GPR Absensi & Kas — Backend API (Google Apps Script, Tanpa PIN)
+ * Database : Google Sheets (8 Tab: 6 Absensi + 2 Kas)
  */
 
 const SHEETS = {
@@ -29,12 +28,30 @@ const SHEETS = {
     name: 'Attendance',
     headers: ['record_key', 'month_key', 'student_id', 'date', 'status', 'updated_at'],
   },
+  KAS_IURAN: {
+    name: 'KasIuran',
+    headers: ['iuran_key', 'student_id', 'month_key', 'amount', 'paid_at'],
+  },
+  KAS_TRANSACTIONS: {
+    name: 'KasTransactions',
+    headers: ['tx_id', 'type', 'amount', 'title', 'category', 'date', 'note', 'created_at'],
+  },
 };
 
 const VALID_STATUS = { H: true, I: true, S: true, A: true, '': true };
 
+const DEFAULT_SETTINGS = [
+  ['class_name', 'GPR C'],
+  ['default_days', '[]'],
+  ['kas_title', 'Iuran Kas Bulanan'],
+  ['kas_fee_amount', '20000'],
+  ['kas_categories_in', '["Donasi & Sukarela","Sisa Kegiatan","Lainnya"]'],
+  ['kas_categories_out', '["Konsumsi","Perlengkapan","Kegiatan","Lainnya"]'],
+];
+
 /**
- * Jalankan fungsi ini SEKALI dari editor Apps Script untuk membuat 6 tab database otomatis.
+ * Aman dijalankan ulang: hanya membuat tab & kunci pengaturan yang belum ada
+ * tanpa menghapus data lama.
  */
 function setupDatabase() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -55,37 +72,35 @@ function setupDatabase() {
       sheet.setFrozenRows(1);
     }
 
-    // Format seluruh kolom sebagai Plain Text agar format tanggal YYYY-MM-DD tidak berubah otomatis
     sheet.getRange(1, 1, sheet.getMaxRows(), def.headers.length).setNumberFormat('@');
   });
 
-  // Isi pengaturan awal default jika tab Settings masih kosong
+  // Tambahkan hanya pengaturan default yang belum ada di tab Settings
   const settingsSheet = ss.getSheetByName(SHEETS.SETTINGS.name);
-  if (settingsSheet.getLastRow() === 1) {
-    const defaults = [
-      ['class_name', 'GPR C'],
-      ['default_days', '[]'],
-    ];
-    settingsSheet.getRange(2, 1, defaults.length, 2).setNumberFormat('@').setValues(defaults);
+  const existingRows = readSheetObjects(SHEETS.SETTINGS.name);
+  const existingKeys = {};
+  existingRows.forEach(function (r) {
+    existingKeys[r.key] = true;
+  });
+
+  const missingDefaults = DEFAULT_SETTINGS.filter(function (pair) {
+    return !existingKeys[pair[0]];
+  });
+
+  if (missingDefaults.length > 0) {
+    appendTextRows(settingsSheet, missingDefaults);
   }
 }
 
-/**
- * Health check publik (tidak membocorkan data apa pun).
- * Buka URL Web App (/exec) di browser untuk memastikan deployment aktif.
- */
 function doGet() {
-  const pinConfigured = Boolean(getAppPin());
   return jsonResponse({
     ok: true,
-    service: 'GPR Absensi API',
-    pinConfigured: pinConfigured,
+    service: 'GPR Absensi & Kas API',
+    auth: 'none',
+    version: '2.0',
   });
 }
 
-/**
- * Endpoint utama seluruh operasi aplikasi (Read & Write terproteksi PIN).
- */
 function doPost(e) {
   try {
     if (!e || !e.postData || !e.postData.contents) {
@@ -93,29 +108,8 @@ function doPost(e) {
     }
 
     const body = JSON.parse(e.postData.contents);
-    const savedPin = getAppPin();
-
-    if (!savedPin) {
-      return jsonResponse({
-        ok: false,
-        error: 'APP_PIN belum diatur di Properti Skrip Apps Script.',
-      });
-    }
-
-    if (String(body.pin || '') !== savedPin) {
-      return jsonResponse({
-        ok: false,
-        unauthorized: true,
-        error: 'PIN salah. Silakan periksa kembali PIN Anda.',
-      });
-    }
-
     const action = String(body.action || '');
     const payload = body.payload || {};
-
-    if (action === 'verifyPin') {
-      return jsonResponse({ ok: true });
-    }
 
     // Operasi baca (tanpa lock)
     if (action === 'getBootstrap') {
@@ -124,8 +118,11 @@ function doPost(e) {
     if (action === 'getMonthData') {
       return jsonResponse({ ok: true, data: handleGetMonthData(payload) });
     }
+    if (action === 'getKasData') {
+      return jsonResponse({ ok: true, data: handleGetKasData() });
+    }
 
-    // Operasi tulis (menggunakan ScriptLock untuk mencegah tabrakan data)
+    // Operasi tulis (terkunci ScriptLock)
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
@@ -158,6 +155,18 @@ function doPost(e) {
         case 'batchSaveAttendance':
           data = handleBatchSaveAttendance(payload);
           break;
+        case 'saveKasSettings':
+          data = handleSaveKasSettings(payload);
+          break;
+        case 'toggleKasIuran':
+          data = handleToggleKasIuran(payload);
+          break;
+        case 'saveKasTransaction':
+          data = handleSaveKasTransaction(payload);
+          break;
+        case 'deleteKasTransaction':
+          data = handleDeleteKasTransaction(payload);
+          break;
         default:
           return jsonResponse({ ok: false, error: 'Aksi tidak dikenali: ' + action });
       }
@@ -174,15 +183,11 @@ function doPost(e) {
 }
 
 /* ===========================
- * HANDLER DATA & LOGIKA CRUD
+ * HANDLER ABSENSI (V1)
  * =========================== */
 
 function handleGetBootstrap() {
-  const settingsRows = readSheetObjects(SHEETS.SETTINGS.name);
-  const settingsMap = {};
-  settingsRows.forEach(function (r) {
-    settingsMap[r.key] = r.value;
-  });
+  const settingsMap = readSettingsMap();
 
   const settings = {
     class_name: settingsMap.class_name || 'GPR Absensi',
@@ -228,10 +233,7 @@ function handleGetBootstrap() {
 }
 
 function handleSaveSettings(payload) {
-  const sheet = getSheet(SHEETS.SETTINGS.name);
-  const rows = readSheetObjects(SHEETS.SETTINGS.name);
   const updates = {};
-
   if (typeof payload.class_name === 'string') {
     updates.class_name = payload.class_name.trim() || 'GPR Absensi';
   }
@@ -244,16 +246,7 @@ function handleSaveSettings(payload) {
     updates.default_days = JSON.stringify(cleanDays);
   }
 
-  Object.keys(updates).forEach(function (key) {
-    const existing = rows.find(function (r) {
-      return r.key === key;
-    });
-    if (existing) {
-      sheet.getRange(existing._row, 2).setNumberFormat('@').setValue(updates[key]);
-    } else {
-      appendTextRows(sheet, [[key, updates[key]]]);
-    }
-  });
+  upsertSettings(updates);
 
   return {
     class_name: updates.class_name,
@@ -304,7 +297,6 @@ function handleDeleteCategory(payload) {
     return { requiresConfirmation: true, usedCount: affectedStudents.length };
   }
 
-  // Hapus relasi kategori dari seluruh siswa yang memakainya (nilai menjadi kosong / "-")
   studentRows.forEach(function (s) {
     const cats = safeJsonParse(s.categories_json, {});
     if (Object.prototype.hasOwnProperty.call(cats, categoryId)) {
@@ -313,12 +305,10 @@ function handleDeleteCategory(payload) {
     }
   });
 
-  // Hapus seluruh sub-kategori di bawah kategori induk ini (dari bawah ke atas)
   deleteMatchingRows(SHEETS.SUBCATEGORIES.name, function (r) {
     return r.category_id === categoryId;
   });
 
-  // Hapus kategori induk
   deleteMatchingRows(SHEETS.CATEGORIES.name, function (r) {
     return r.category_id === categoryId;
   });
@@ -367,7 +357,6 @@ function handleDeleteSubCategory(payload) {
     return { requiresConfirmation: true, usedCount: affectedActive.length };
   }
 
-  // Kosongkan nilai sub-kategori pada siswa terkait (tampil sebagai "-")
   studentRows.forEach(function (s) {
     const cats = safeJsonParse(s.categories_json, {});
     let changed = false;
@@ -439,7 +428,6 @@ function handleDeleteStudent(payload) {
   });
   if (!existing) throw new Error('Data siswa tidak ditemukan.');
 
-  // Soft delete agar riwayat absensi bulan sebelumnya tetap aman
   sheet.getRange(existing._row, 4).setNumberFormat('@').setValue('FALSE');
   return { deleted: true, student_id: studentId };
 }
@@ -532,7 +520,6 @@ function handleBatchSaveAttendance(payload) {
     return { saved: 0 };
   }
 
-  // Ambil perubahan terakhir per sel jika terjadi ketukan berulang pada sel yang sama
   const deduped = {};
   changes.forEach(function (item) {
     const studentId = String(item.student_id || '').trim();
@@ -594,11 +581,243 @@ function handleBatchSaveAttendance(payload) {
 }
 
 /* ===========================
+ * HANDLER KAS (V2)
+ * =========================== */
+
+function handleGetKasData() {
+  const settingsMap = readSettingsMap();
+
+  const kasSettings = {
+    title: settingsMap.kas_title || 'Iuran Kas Bulanan',
+    fee_amount: Math.max(0, Number(settingsMap.kas_fee_amount) || 20000),
+    categories_in: safeJsonParse(settingsMap.kas_categories_in, [
+      'Donasi & Sukarela',
+      'Sisa Kegiatan',
+      'Lainnya',
+    ]),
+    categories_out: safeJsonParse(settingsMap.kas_categories_out, [
+      'Konsumsi',
+      'Perlengkapan',
+      'Kegiatan',
+      'Lainnya',
+    ]),
+  };
+
+  const iuran = readSheetObjects(SHEETS.KAS_IURAN.name).map(function (r) {
+    return {
+      iuran_key: r.iuran_key,
+      student_id: r.student_id,
+      month_key: r.month_key,
+      amount: Number(r.amount) || 0,
+      paid_at: r.paid_at || '',
+    };
+  });
+
+  const transactions = readSheetObjects(SHEETS.KAS_TRANSACTIONS.name).map(function (r) {
+    return {
+      tx_id: r.tx_id,
+      type: r.type === 'out' ? 'out' : 'in',
+      amount: Number(r.amount) || 0,
+      title: r.title || '',
+      category: r.category || 'Lainnya',
+      date: r.date || '',
+      note: r.note || '',
+      created_at: r.created_at || '',
+    };
+  });
+
+  return {
+    kasSettings: kasSettings,
+    iuran: iuran,
+    transactions: transactions,
+  };
+}
+
+function handleSaveKasSettings(payload) {
+  const updates = {};
+
+  if (typeof payload.title === 'string') {
+    updates.kas_title = payload.title.trim() || 'Iuran Kas Bulanan';
+  }
+  if (payload.fee_amount !== undefined) {
+    const fee = Math.round(Number(payload.fee_amount));
+    if (isNaN(fee) || fee < 0) throw new Error('Nominal iuran harus berupa angka valid.');
+    updates.kas_fee_amount = String(fee);
+  }
+  if (Array.isArray(payload.categories_in)) {
+    const cleanIn = payload.categories_in
+      .map(function (c) {
+        return String(c || '').trim();
+      })
+      .filter(Boolean);
+    updates.kas_categories_in = JSON.stringify(cleanIn);
+  }
+  if (Array.isArray(payload.categories_out)) {
+    const cleanOut = payload.categories_out
+      .map(function (c) {
+        return String(c || '').trim();
+      })
+      .filter(Boolean);
+    updates.kas_categories_out = JSON.stringify(cleanOut);
+  }
+
+  upsertSettings(updates);
+  return handleGetKasData().kasSettings;
+}
+
+function handleToggleKasIuran(payload) {
+  const studentId = String(payload.student_id || '').trim();
+  const monthKey = String(payload.month_key || '').trim();
+  const paid = Boolean(payload.paid);
+
+  if (!studentId || !/^\d{4}-\d{2}$/.test(monthKey)) {
+    throw new Error('Data siswa atau format bulan iuran tidak valid.');
+  }
+
+  const iuranKey = studentId + '|' + monthKey;
+  const sheet = getSheet(SHEETS.KAS_IURAN.name);
+  const rows = readSheetObjects(SHEETS.KAS_IURAN.name);
+  const existing = rows.find(function (r) {
+    return r.iuran_key === iuranKey;
+  });
+
+  if (paid) {
+    if (existing) {
+      return {
+        paid: true,
+        record: {
+          iuran_key: existing.iuran_key,
+          student_id: existing.student_id,
+          month_key: existing.month_key,
+          amount: Number(existing.amount) || 0,
+          paid_at: existing.paid_at,
+        },
+      };
+    }
+
+    const settingsMap = readSettingsMap();
+    const defaultFee = Math.max(0, Number(settingsMap.kas_fee_amount) || 20000);
+    const amount =
+      payload.amount !== undefined && Number(payload.amount) >= 0
+        ? Math.round(Number(payload.amount))
+        : defaultFee;
+    const now = new Date().toISOString();
+
+    appendTextRows(sheet, [[iuranKey, studentId, monthKey, String(amount), now]]);
+    return {
+      paid: true,
+      record: {
+        iuran_key: iuranKey,
+        student_id: studentId,
+        month_key: monthKey,
+        amount: amount,
+        paid_at: now,
+      },
+    };
+  }
+
+  // Batalkan pembayaran iuran
+  if (existing) {
+    deleteMatchingRows(SHEETS.KAS_IURAN.name, function (r) {
+      return r.iuran_key === iuranKey;
+    });
+  }
+
+  return { paid: false, iuran_key: iuranKey };
+}
+
+function handleSaveKasTransaction(payload) {
+  const type = payload.type === 'out' ? 'out' : 'in';
+  const amount = Math.round(Number(payload.amount));
+  const title = String(payload.title || '').trim();
+  const category = String(payload.category || 'Lainnya').trim() || 'Lainnya';
+  const date = String(payload.date || '').trim();
+  const note = String(payload.note || '').trim();
+
+  if (isNaN(amount) || amount <= 0) throw new Error('Nominal transaksi harus lebih dari Rp 0.');
+  if (!title) throw new Error('Judul / keperluan transaksi wajib diisi.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Tanggal transaksi tidak valid.');
+
+  const sheet = getSheet(SHEETS.KAS_TRANSACTIONS.name);
+  const rows = readSheetObjects(SHEETS.KAS_TRANSACTIONS.name);
+
+  if (payload.tx_id) {
+    const existing = rows.find(function (r) {
+      return r.tx_id === payload.tx_id;
+    });
+    if (!existing) throw new Error('Data transaksi tidak ditemukan.');
+
+    sheet
+      .getRange(existing._row, 2, 1, 6)
+      .setNumberFormat('@')
+      .setValues([[type, String(amount), title, category, date, note]]);
+
+    return {
+      tx_id: existing.tx_id,
+      type: type,
+      amount: amount,
+      title: title,
+      category: category,
+      date: date,
+      note: note,
+      created_at: existing.created_at,
+    };
+  }
+
+  const newId = generateId('tx');
+  const now = new Date().toISOString();
+  appendTextRows(sheet, [[newId, type, String(amount), title, category, date, note, now]]);
+
+  return {
+    tx_id: newId,
+    type: type,
+    amount: amount,
+    title: title,
+    category: category,
+    date: date,
+    note: note,
+    created_at: now,
+  };
+}
+
+function handleDeleteKasTransaction(payload) {
+  const txId = String(payload.tx_id || '').trim();
+  if (!txId) throw new Error('ID transaksi tidak valid.');
+
+  deleteMatchingRows(SHEETS.KAS_TRANSACTIONS.name, function (r) {
+    return r.tx_id === txId;
+  });
+
+  return { deleted: true, tx_id: txId };
+}
+
+/* ===========================
  * UTILITY HELPERS
  * =========================== */
 
-function getAppPin() {
-  return String(PropertiesService.getScriptProperties().getProperty('APP_PIN') || '').trim();
+function readSettingsMap() {
+  const rows = readSheetObjects(SHEETS.SETTINGS.name);
+  const map = {};
+  rows.forEach(function (r) {
+    map[r.key] = r.value;
+  });
+  return map;
+}
+
+function upsertSettings(updates) {
+  const sheet = getSheet(SHEETS.SETTINGS.name);
+  const rows = readSheetObjects(SHEETS.SETTINGS.name);
+
+  Object.keys(updates).forEach(function (key) {
+    const existing = rows.find(function (r) {
+      return r.key === key;
+    });
+    if (existing) {
+      sheet.getRange(existing._row, 2).setNumberFormat('@').setValue(updates[key]);
+    } else {
+      appendTextRows(sheet, [[key, updates[key]]]);
+    }
+  });
 }
 
 function getSheet(sheetName) {
@@ -662,5 +881,3 @@ function jsonResponse(obj) {
     ContentService.MimeType.JSON
   );
 }
-
-yes

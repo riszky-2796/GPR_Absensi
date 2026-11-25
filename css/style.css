@@ -1185,3 +1185,649 @@ body {
     width: 340px;
   }
 }
+
+/* =========================================================
+ * UPGRADE V2 — MODUL KAS (TEMA BIRU GPR ABSENSI)
+ * ========================================================= */
+
+.bottom-nav {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.bottom-nav-btn {
+  font-size: 10px;
+}
+
+.btn-success {
+  background-color: #16a34a;
+  color: #ffffff;
+}
+
+.btn-success:hover:not(:disabled) {
+  background-color: #15803d;
+}
+
+/* ===== HERO SALDO KAS ===== */
+.kas-hero {
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-md);
+}
+
+.kas-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kas-hero-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  opacity: 0.85;
+  text-transform: uppercase;
+}
+
+.kas-online-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.16);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.kas-online-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #4ade80;
+}
+
+.kas-balance {
+  margin: 8px 0 18px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+
+.kas-hero-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background-color: rgba(15, 23, 42, 0.22);
+}
+
+.kas-hero-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kas-hero-stat:last-child {
+  padding-left: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.kas-stat-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.kas-stat-icon.in {
+  background-color: rgba(74, 222, 128, 0.2);
+  color: #86efac;
+}
+
+.kas-stat-icon.out {
+  background-color: rgba(248, 113, 113, 0.22);
+  color: #fca5a5;
+}
+
+.kas-stat-caption {
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.kas-stat-num {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ===== 3 TOMBOL AKSI CEPAT ===== */
+.kas-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.kas-quick-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.12s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.kas-quick-btn:hover {
+  border-color: var(--primary);
+  background-color: var(--primary-soft);
+}
+
+.kas-quick-btn:active {
+  transform: scale(0.98);
+}
+
+.kas-quick-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.kas-quick-icon.iuran {
+  background-color: var(--primary-soft);
+  color: var(--primary);
+}
+
+.kas-quick-icon.in {
+  background-color: var(--status-h-bg);
+  color: var(--status-h-text);
+}
+
+.kas-quick-icon.out {
+  background-color: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+/* ===== MENU PENGELOLAAN & TRANSAKSI TERBARU ===== */
+.kas-section-label {
+  margin: 4px 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.kas-menu-card {
+  padding: 6px;
+}
+
+.kas-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.kas-menu-item:hover {
+  background-color: var(--surface-muted);
+}
+
+.kas-menu-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.kas-menu-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.kas-menu-badge.blue {
+  background-color: var(--primary-soft);
+  color: var(--primary);
+}
+
+.kas-menu-badge.purple {
+  background-color: #f3e8ff;
+  color: #7e22ce;
+}
+
+.kas-menu-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.kas-menu-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.kas-chevron {
+  font-size: 18px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.kas-tx-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.kas-tx-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kas-tx-item:last-child {
+  border-bottom: none;
+}
+
+.kas-tx-item.is-clickable {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 12px 8px;
+}
+
+.kas-tx-item.is-clickable:hover {
+  background-color: var(--surface-muted);
+}
+
+.kas-tx-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kas-tx-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.kas-tx-icon.in {
+  background-color: var(--status-h-bg);
+  color: var(--status-h-text);
+}
+
+.kas-tx-icon.out {
+  background-color: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.kas-tx-info {
+  min-width: 0;
+}
+
+.kas-tx-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kas-tx-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.kas-tx-amount {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.kas-tx-amount.in {
+  color: #15803d;
+}
+
+.kas-tx-amount.out {
+  color: var(--danger);
+}
+
+/* ===== SUB-HALAMAN KAS (HEADER KEMBALI) ===== */
+.kas-sub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kas-sub-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* ===== HALAMAN BAYAR IURAN (1-KLIK) ===== */
+.kas-iuran-banner {
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: #ffffff;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kas-iuran-banner-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kas-iuran-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.kas-iuran-fee {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 700;
+  opacity: 0.95;
+}
+
+.kas-banner-icon-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: var(--radius-sm);
+  background-color: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.kas-banner-icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.24);
+}
+
+.kas-year-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kas-year-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kas-year-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.kas-year-label {
+  font-size: 14px;
+  font-weight: 700;
+  min-width: 52px;
+  text-align: center;
+}
+
+.kas-period-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.18);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.kas-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.kas-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+.kas-dot.paid {
+  background-color: #16a34a;
+}
+
+.kas-dot.unpaid {
+  background-color: var(--border-strong);
+}
+
+.kas-student-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.kas-student-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kas-student-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.kas-badge-paid {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: var(--status-h-bg);
+  color: var(--status-h-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kas-badge-unpaid {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kas-month-row {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kas-month-btn {
+  flex: 0 0 auto;
+  min-width: 58px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.kas-month-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.kas-month-btn.is-paid {
+  background-color: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff;
+}
+
+.kas-month-btn.is-busy {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* ===== FORM CATAT KAS MASUK / KELUAR ===== */
+.kas-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.kas-segment-btn {
+  min-height: 40px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.kas-segment-btn.active-in {
+  background-color: #16a34a;
+  color: #ffffff;
+}
+
+.kas-segment-btn.active-out {
+  background-color: var(--danger);
+  color: #ffffff;
+}
+
+.kas-nominal-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface);
+}
+
+.kas-nominal-box:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+
+.kas-rp-prefix {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.kas-nominal-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  padding: 6px 0;
+}
+
+.kas-cat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.kas-add-cat-btn {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.kas-add-cat-btn:hover {
+  text-decoration: underline;
+}

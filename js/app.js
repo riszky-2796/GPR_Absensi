@@ -5,6 +5,7 @@ import {
   setActiveTab,
   setBootstrapData,
   setMonthData,
+  setKasData,
   setAttendanceValue,
   getSubCategoriesByCategory,
 } from './state.js';
@@ -31,11 +32,14 @@ import {
   renderKategoriView,
   renderPengaturanView,
 } from './ui.js';
+import { renderKasView, bindKasEvents } from './kas.js';
+import { initPwaInstall } from './pwa.js';
 
 const dom = {
   headerClassName: document.getElementById('header-class-name'),
   syncPill: document.getElementById('sync-pill'),
   viewAbsensi: document.getElementById('view-absensi'),
+  viewKas: document.getElementById('view-kas'),
   viewSiswa: document.getElementById('view-siswa'),
   viewKategori: document.getElementById('view-kategori'),
   viewPengaturan: document.getElementById('view-pengaturan'),
@@ -47,9 +51,7 @@ let isFlushingQueue = false;
 
 /* ==================== SYNC STATUS & BATCH QUEUE ==================== */
 
-/**
- * @param {'idle' | 'saving' | 'error'} status
- */
+/** @param {'idle' | 'saving' | 'error'} status */
 function updateSyncPill(status) {
   state.syncStatus = status;
   dom.syncPill.className = 'sync-pill';
@@ -65,9 +67,7 @@ function updateSyncPill(status) {
   }
 }
 
-/**
- * @param {string} monthKey
- */
+/** @param {string} monthKey */
 async function ensureMonthScheduleLocked(monthKey) {
   if (state.schedulesByMonth[monthKey]) return;
   const resolved = resolveMonthDates(monthKey, state.settings.default_days, null);
@@ -165,7 +165,7 @@ function handlePickAttendanceStatus(cellEl, studentId, date, status) {
 function syncHeaderTitle() {
   const title = state.settings.class_name || 'GPR Absensi';
   dom.headerClassName.textContent = title;
-  document.title = `${title} — GPR Absensi`;
+  document.title = `${title} — Absensi & Kas`;
 }
 
 function renderActiveView() {
@@ -174,6 +174,8 @@ function renderActiveView() {
 
   if (state.activeTab === 'absensi') {
     renderAbsensiView(dom.viewAbsensi);
+  } else if (state.activeTab === 'kas') {
+    renderKasView(dom.viewKas);
   } else if (state.activeTab === 'siswa') {
     renderSiswaView(dom.viewSiswa);
   } else if (state.activeTab === 'kategori') {
@@ -198,11 +200,21 @@ async function ensureMonthLoaded(monthKey, forceReload = false) {
   }
 }
 
-/**
- * @param {string} tabName
- */
+/** @param {boolean} [forceReload=false] */
+async function ensureKasLoaded(forceReload = false) {
+  if (!forceReload && state.kas.loaded) return;
+  setLoading(true, 'Memuat data kas...');
+  try {
+    const data = await api.getKasData();
+    setKasData(data);
+  } finally {
+    setLoading(false);
+  }
+}
+
+/** @param {string} tabName */
 async function switchTab(tabName) {
-  const validTabs = ['absensi', 'siswa', 'kategori', 'pengaturan'];
+  const validTabs = ['absensi', 'kas', 'siswa', 'kategori', 'pengaturan'];
   const target = validTabs.includes(tabName) ? tabName : 'absensi';
   setActiveTab(target);
 
@@ -222,14 +234,18 @@ async function switchTab(tabName) {
     } catch (err) {
       showToast(err.message, 'error');
     }
+  } else if (target === 'kas') {
+    try {
+      await ensureKasLoaded();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
   }
 
   renderActiveView();
 }
 
-/**
- * @param {number} delta
- */
+/** @param {number} delta */
 async function changeActiveMonth(delta) {
   closePopover();
   if (state.pendingQueue.size > 0) {
@@ -248,9 +264,7 @@ async function changeActiveMonth(delta) {
 
 /* ==================== CRUD KATEGORI 2 LAPIS ==================== */
 
-/**
- * @param {import('./state.js').Category | null} [existingCat=null]
- */
+/** @param {import('./state.js').Category | null} [existingCat=null] */
 function openCategoryModal(existingCat = null) {
   const isEdit = Boolean(existingCat);
   openModal({
@@ -313,9 +327,7 @@ function openCategoryModal(existingCat = null) {
   });
 }
 
-/**
- * @param {string} categoryId
- */
+/** @param {string} categoryId */
 async function handleDeleteCategory(categoryId) {
   const cat = state.categories.find((c) => c.category_id === categoryId);
   if (!cat) return;
@@ -357,9 +369,7 @@ async function handleDeleteCategory(categoryId) {
   }
 }
 
-/**
- * @param {import('./state.js').SubCategory} existingSub
- */
+/** @param {import('./state.js').SubCategory} existingSub */
 function openEditSubCategoryModal(existingSub) {
   openModal({
     title: 'Ubah Nama Sub-Kategori',
@@ -419,9 +429,7 @@ function openEditSubCategoryModal(existingSub) {
   });
 }
 
-/**
- * @param {string} subCategoryId
- */
+/** @param {string} subCategoryId */
 async function handleDeleteSubCategory(subCategoryId) {
   const sub = state.subCategories.find((s) => s.subcategory_id === subCategoryId);
   if (!sub) return;
@@ -459,9 +467,7 @@ async function handleDeleteSubCategory(subCategoryId) {
 
 /* ==================== CRUD SISWA ==================== */
 
-/**
- * @param {import('./state.js').Student | null} [existingStudent=null]
- */
+/** @param {import('./state.js').Student | null} [existingStudent=null] */
 function openStudentModal(existingStudent = null) {
   const isEdit = Boolean(existingStudent);
   const sortedCategories = state.categories.slice().sort((a, b) => a.order_index - b.order_index);
@@ -566,16 +572,14 @@ function openStudentModal(existingStudent = null) {
   });
 }
 
-/**
- * @param {string} studentId
- */
+/** @param {string} studentId */
 function handleDeleteStudent(studentId) {
   const student = state.students.find((s) => s.student_id === studentId);
   if (!student) return;
 
   openConfirmModal({
     title: 'Hapus Siswa',
-    message: `Hapus "${student.name}" dari daftar siswa aktif? Riwayat absensi pada bulan-bulan sebelumnya akan tetap tersimpan aman.`,
+    message: `Hapus "${student.name}" dari daftar siswa aktif? Riwayat absensi & kas pada bulan-bulan sebelumnya akan tetap tersimpan aman.`,
     confirmText: 'Ya, Hapus',
     onConfirm: async () => {
       await api.deleteStudent(studentId);
@@ -588,9 +592,7 @@ function handleDeleteStudent(studentId) {
 
 /* ==================== PENGATURAN & JADWAL HYBRID ==================== */
 
-/**
- * @param {string} isoDate
- */
+/** @param {string} isoDate */
 async function handleAddManualDate(isoDate) {
   const monthKey = state.activeMonthKey;
   if (!isoDate || !isoDate.startsWith(`${monthKey}-`)) {
@@ -634,9 +636,7 @@ async function handleAddManualDate(isoDate) {
   }
 }
 
-/**
- * @param {string} isoDate
- */
+/** @param {string} isoDate */
 async function handleRemoveScheduleDate(isoDate) {
   const monthKey = state.activeMonthKey;
   const resolved = resolveMonthDates(
@@ -692,7 +692,7 @@ async function handleResetMonthSchedule() {
   }
 }
 
-/* ==================== EXPORT REKAP .XLSX ==================== */
+/* ==================== EXPORT REKAP ABSENSI .XLSX ==================== */
 
 async function handleExportExcel() {
   const monthKey = state.activeMonthKey;
@@ -737,7 +737,7 @@ async function handleExportExcel() {
   }
 }
 
-/* ==================== BOOTSTRAP LANGSUNG (TANPA PIN) ==================== */
+/* ==================== BOOTSTRAP LANGSUNG ==================== */
 
 function renderBootstrapError(message) {
   const activeSection =
@@ -784,19 +784,24 @@ async function bootstrapApplication() {
 /* ==================== EVENT DELEGATION ==================== */
 
 function bindEvents() {
-  // 1. Navigasi Desktop & Mobile
   document.querySelectorAll('[data-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+      if (btn.dataset.tab === 'kas') {
+        state.kas.subView = 'dashboard';
+        state.kas.editTxId = null;
+      }
+      switchTab(btn.dataset.tab);
+    });
   });
 
-  // 2. Tombol Retry Sync Pill
   dom.syncPill.addEventListener('click', () => {
     if (state.syncStatus === 'error' || state.pendingQueue.size > 0) {
       flushPendingQueue();
     }
   });
 
-  // 3. Delegasi Klik di Area Konten Utama (Semua 4 Tab)
+  bindKasEvents(dom.viewKas);
+
   const main = document.getElementById('main-content');
   main.addEventListener('click', async (e) => {
     const target = e.target;
@@ -905,7 +910,6 @@ function bindEvents() {
     }
   });
 
-  // 4. Delegasi Submit Form di Area Konten Utama
   main.addEventListener('submit', async (e) => {
     const form = e.target;
 
@@ -969,7 +973,6 @@ function bindEvents() {
     }
   });
 
-  // 5. Tutup Popover saat klik di luar, scroll, atau resize layar
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.absen-cell') && !e.target.closest('.popover-menu')) {
       closePopover();
@@ -978,7 +981,6 @@ function bindEvents() {
   window.addEventListener('scroll', closePopover, true);
   window.addEventListener('resize', closePopover);
 
-  // 6. Peringatan jika menutup tab saat masih ada data belum tersimpan
   window.addEventListener('beforeunload', (e) => {
     if (state.pendingQueue.size > 0) {
       e.preventDefault();
@@ -988,6 +990,7 @@ function bindEvents() {
 }
 
 function init() {
+  initPwaInstall();
   bindEvents();
   bootstrapApplication();
 }

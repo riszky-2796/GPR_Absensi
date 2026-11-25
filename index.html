@@ -4,8 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
-  <title>GPR Absensi</title>
-  <link rel="icon" href="data:," />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="GPR Absensi" />
+  <title>GPR Absensi &amp; Kas</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/png" href="./assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="./assets/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -20,21 +25,30 @@
     <header class="app-header">
       <div class="header-inner">
         <div class="brand-group">
-          <span class="brand-badge" aria-hidden="true">GA</span>
+          <img src="./assets/icon-192.png" alt="GPR Absensi" class="brand-badge" style="object-fit: cover;" />
           <div class="brand-text">
             <div id="header-class-name" class="brand-title">GPR Absensi</div>
-            <div class="brand-sub">Absensi &amp; Rekap Bulanan</div>
+            <div class="brand-sub">Absensi &amp; Pencatatan Kas</div>
           </div>
         </div>
 
         <nav class="desktop-nav" aria-label="Navigasi Utama">
           <button type="button" class="nav-btn active" data-tab="absensi">Absensi</button>
+          <button type="button" class="nav-btn" data-tab="kas">Kas</button>
           <button type="button" class="nav-btn" data-tab="siswa">Siswa</button>
           <button type="button" class="nav-btn" data-tab="kategori">Kategori</button>
           <button type="button" class="nav-btn" data-tab="pengaturan">Pengaturan &amp; Rekap</button>
         </nav>
 
         <div class="header-actions">
+          <button
+            id="btn-install-app"
+            type="button"
+            class="btn btn-primary btn-sm hidden"
+            title="Instal Aplikasi ke HP"
+          >
+            ⬇ Install
+          </button>
           <button
             id="sync-pill"
             type="button"
@@ -49,6 +63,7 @@
 
     <main id="main-content" class="main-content">
       <section id="view-absensi" class="view-section active" data-view="absensi"></section>
+      <section id="view-kas" class="view-section hidden" data-view="kas"></section>
       <section id="view-siswa" class="view-section hidden" data-view="siswa"></section>
       <section id="view-kategori" class="view-section hidden" data-view="kategori"></section>
       <section id="view-pengaturan" class="view-section hidden" data-view="pengaturan"></section>
@@ -61,6 +76,14 @@
           <path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4" />
         </svg>
         <span>Absensi</span>
+      </button>
+
+      <button type="button" class="bottom-nav-btn" data-tab="kas">
+        <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="2" y="5" width="20" height="14" rx="2" />
+          <path d="M16 12h2M2 10h20" />
+        </svg>
+        <span>Kas</span>
       </button>
 
       <button type="button" class="bottom-nav-btn" data-tab="siswa">
@@ -83,9 +106,9 @@
       <button type="button" class="bottom-nav-btn" data-tab="pengaturan">
         <svg class="nav-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
-        <span>Atur &amp; Rekap</span>
+        <span>Atur</span>
       </button>
     </nav>
   </div>
