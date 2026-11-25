@@ -47,12 +47,9 @@ const DEFAULT_SETTINGS = [
   ['kas_fee_amount', '20000'],
   ['kas_categories_in', '["Donasi & Sukarela","Sisa Kegiatan","Lainnya"]'],
   ['kas_categories_out', '["Konsumsi","Perlengkapan","Kegiatan","Lainnya"]'],
+  ['kas_months_by_year', '{}'],
 ];
 
-/**
- * Aman dijalankan ulang: hanya membuat tab & kunci pengaturan yang belum ada
- * tanpa menghapus data lama.
- */
 function setupDatabase() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
@@ -75,7 +72,6 @@ function setupDatabase() {
     sheet.getRange(1, 1, sheet.getMaxRows(), def.headers.length).setNumberFormat('@');
   });
 
-  // Tambahkan hanya pengaturan default yang belum ada di tab Settings
   const settingsSheet = ss.getSheetByName(SHEETS.SETTINGS.name);
   const existingRows = readSheetObjects(SHEETS.SETTINGS.name);
   const existingKeys = {};
@@ -97,7 +93,7 @@ function doGet() {
     ok: true,
     service: 'GPR Absensi & Kas API',
     auth: 'none',
-    version: '2.0',
+    version: '2.1',
   });
 }
 
@@ -111,7 +107,6 @@ function doPost(e) {
     const action = String(body.action || '');
     const payload = body.payload || {};
 
-    // Operasi baca (tanpa lock)
     if (action === 'getBootstrap') {
       return jsonResponse({ ok: true, data: handleGetBootstrap() });
     }
@@ -122,7 +117,6 @@ function doPost(e) {
       return jsonResponse({ ok: true, data: handleGetKasData() });
     }
 
-    // Operasi tulis (terkunci ScriptLock)
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
@@ -581,7 +575,7 @@ function handleBatchSaveAttendance(payload) {
 }
 
 /* ===========================
- * HANDLER KAS (V2)
+ * HANDLER KAS (V2.1)
  * =========================== */
 
 function handleGetKasData() {
@@ -601,6 +595,7 @@ function handleGetKasData() {
       'Kegiatan',
       'Lainnya',
     ]),
+    months_by_year: safeJsonParse(settingsMap.kas_months_by_year, {}),
   };
 
   const iuran = readSheetObjects(SHEETS.KAS_IURAN.name).map(function (r) {
@@ -660,6 +655,31 @@ function handleSaveKasSettings(payload) {
       .filter(Boolean);
     updates.kas_categories_out = JSON.stringify(cleanOut);
   }
+  if (payload.months_by_year && typeof payload.months_by_year === 'object') {
+    const cleanMap = {};
+    Object.keys(payload.months_by_year).forEach(function (yr) {
+      if (!/^\d{4}$/.test(yr)) return;
+      const arr = payload.months_by_year[yr];
+      if (!Array.isArray(arr)) return;
+      const seen = {};
+      const cleanMonths = arr
+        .map(Number)
+        .filter(function (m) {
+          if (m >= 1 && m <= 12 && !seen[m]) {
+            seen[m] = true;
+            return true;
+          }
+          return false;
+        })
+        .sort(function (a, b) {
+          return a - b;
+        });
+      if (cleanMonths.length > 0) {
+        cleanMap[yr] = cleanMonths;
+      }
+    });
+    updates.kas_months_by_year = JSON.stringify(cleanMap);
+  }
 
   upsertSettings(updates);
   return handleGetKasData().kasSettings;
@@ -716,7 +736,6 @@ function handleToggleKasIuran(payload) {
     };
   }
 
-  // Batalkan pembayaran iuran
   if (existing) {
     deleteMatchingRows(SHEETS.KAS_IURAN.name, function (r) {
       return r.iuran_key === iuranKey;
