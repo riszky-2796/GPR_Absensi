@@ -1,6 +1,6 @@
 import { EXCEL_COLORS, MONTH_NAMES } from './config.js';
 import { api } from './api.js';
-import { state, getCurrentMonthKey } from './state.js';
+import { state } from './state.js';
 import {
   escapeHtml,
   showToast,
@@ -77,6 +77,29 @@ function getStudentNameById(studentId) {
   return found ? found.name : 'Siswa';
 }
 
+/** @param {boolean} isPaid */
+function renderIuranBadgeHtml(isPaid) {
+  if (isPaid) {
+    return `<span class="badge-status badge-status-h">✓</span>`;
+  }
+  return `<span class="badge-status badge-status-empty">·</span>`;
+}
+
+/**
+ * Memperbarui angka kolom LUNAS (X/12) pada 1 baris siswa tanpa merender ulang seluruh tabel.
+ * @param {HTMLElement} cellEl
+ * @param {string} studentId
+ */
+function updateRowPaidCount(cellEl, studentId) {
+  const countCell = cellEl.closest('tr')?.querySelector('[data-kas-student-count]');
+  if (!countCell) return;
+  const yearPrefix = `${state.kas.activeYear}-`;
+  const count = state.kas.iuran.filter(
+    (r) => r.student_id === studentId && r.month_key.startsWith(yearPrefix)
+  ).length;
+  countCell.innerHTML = `<strong>${count}/12</strong>`;
+}
+
 /**
  * Menghitung saldo total, pemasukan, pengeluaran, dan gabungan arus transaksi (Single Source of Truth).
  */
@@ -98,7 +121,6 @@ function computeKasSummary() {
   const totalIn = totalIuran + totalTxIn;
   const balance = totalIn - totalOut;
 
-  // Gabungkan iuran & transaksi manual untuk Transaksi Terbaru dan Buku Kas
   const combined = [];
 
   state.kas.iuran.forEach((r) => {
@@ -118,7 +140,8 @@ function computeKasSummary() {
 
   state.kas.transactions.forEach((tx) => {
     const datePart = extractDatePart(tx.date);
-    const timeSuffix = tx.created_at && tx.created_at.length >= 19 ? tx.created_at.slice(10) : 'T12:00:00';
+    const timeSuffix =
+      tx.created_at && tx.created_at.length >= 19 ? tx.created_at.slice(10) : 'T12:00:00';
     combined.push({
       kind: 'tx',
       id: tx.tx_id,
@@ -272,74 +295,81 @@ function renderDashboardHtml() {
 function renderIuranHtml() {
   const year = state.kas.activeYear;
   const activeStudents = state.students.filter((s) => s.is_active);
-  const currentMonthKey = getCurrentMonthKey();
-  const isCurrentYear = String(year) === currentMonthKey.slice(0, 4);
+  const paidSet = new Set(state.kas.iuran.map((r) => r.iuran_key));
 
-  const paidMap = new Set(state.kas.iuran.map((r) => r.iuran_key));
+  let tableBodyHtml = '';
 
-  const studentsHtml =
-    activeStudents.length === 0
-      ? `
-        <div class="card">
-          <div class="empty-state">
-            <strong>Belum ada data siswa</strong>
-            Tambahkan siswa di menu <b>Siswa</b> terlebih dahulu untuk mencatat pembayaran iuran.
-            <div style="margin-top: 12px;">
-              <button type="button" class="btn btn-primary btn-sm" data-goto-tab="siswa">Buka Menu Siswa</button>
-            </div>
-          </div>
+  if (activeStudents.length === 0) {
+    tableBodyHtml = `
+      <div class="empty-state">
+        <strong>Belum ada data siswa</strong>
+        Tambahkan siswa di menu <b>Siswa</b> terlebih dahulu untuk mencatat pembayaran iuran.
+        <div style="margin-top: 12px;">
+          <button type="button" class="btn btn-primary btn-sm" data-goto-tab="siswa">Buka Menu Siswa</button>
         </div>
-      `
-      : activeStudents
-          .map((student) => {
-            let paidCountYear = 0;
-            const monthBtns = MONTH_SHORT.map((label, idx) => {
-              const mm = String(idx + 1).padStart(2, '0');
-              const monthKey = `${year}-${mm}`;
-              const key = `${student.student_id}|${monthKey}`;
-              const isPaid = paidMap.has(key);
-              if (isPaid) paidCountYear++;
+      </div>
+    `;
+  } else {
+    const monthHeaders = MONTH_SHORT.map(
+      (label) => `<th class="col-date">${escapeHtml(label.toUpperCase())}</th>`
+    ).join('');
 
-              return `
-                <button
-                  type="button"
-                  class="kas-month-btn ${isPaid ? 'is-paid' : ''}"
-                  data-kas-toggle-iuran
-                  data-student-id="${escapeHtml(student.student_id)}"
-                  data-month-key="${escapeHtml(monthKey)}"
-                  data-paid="${isPaid ? '1' : '0'}"
-                >
-                  ${isPaid ? '✓ ' : ''}${label}
-                </button>
-              `;
-            }).join('');
+    const studentRows = activeStudents
+      .map((student, index) => {
+        let paidCountYear = 0;
 
-            let statusBadge = '';
-            if (isCurrentYear) {
-              const isCurrentPaid = paidMap.has(`${student.student_id}|${currentMonthKey}`);
-              statusBadge = isCurrentPaid
-                ? `<span class="kas-badge-paid">Lunas</span>`
-                : `<span class="kas-badge-unpaid">Belum Bayar</span>`;
-            } else {
-              statusBadge =
-                paidCountYear > 0
-                  ? `<span class="kas-badge-paid">${paidCountYear}/12 Bln</span>`
-                  : `<span class="kas-badge-unpaid">0/12 Bln</span>`;
-            }
+        const monthCells = MONTH_SHORT.map((label, mIdx) => {
+          const mm = String(mIdx + 1).padStart(2, '0');
+          const monthKey = `${year}-${mm}`;
+          const isPaid = paidSet.has(`${student.student_id}|${monthKey}`);
+          if (isPaid) paidCountYear++;
 
-            return `
-              <div class="kas-student-card">
-                <div class="kas-student-head">
-                  <span class="kas-student-name">${escapeHtml(student.name)}</span>
-                  ${statusBadge}
-                </div>
-                <div class="kas-month-row">
-                  ${monthBtns}
-                </div>
-              </div>
-            `;
-          })
-          .join('');
+          return `
+            <td
+              class="absen-cell"
+              data-kas-toggle-iuran
+              data-student-id="${escapeHtml(student.student_id)}"
+              data-month-key="${escapeHtml(monthKey)}"
+              data-paid="${isPaid ? '1' : '0'}"
+              title="${escapeHtml(student.name)} — ${label} ${year}"
+            >
+              ${renderIuranBadgeHtml(isPaid)}
+            </td>
+          `;
+        }).join('');
+
+        return `
+          <tr>
+            <td class="sticky-col-no">${index + 1}</td>
+            <td class="sticky-col-name" title="${escapeHtml(student.name)}">${escapeHtml(student.name)}</td>
+            ${monthCells}
+            <td data-kas-student-count><strong>${paidCountYear}/12</strong></td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    tableBodyHtml = `
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="sticky-col-no">NO</th>
+              <th class="sticky-col-name">NAMA</th>
+              ${monthHeaders}
+              <th>LUNAS</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${studentRows}
+          </tbody>
+        </table>
+      </div>
+      <p class="helper-text">
+        Ketuk kotak bulan kosong untuk menandai <b>Lunas (✓)</b>. Ketuk kotak bertanda <b>✓</b> jika ingin membatalkan pembayaran.
+      </p>
+    `;
+  }
 
   return `
     <div class="kas-sub-header">
@@ -370,20 +400,23 @@ function renderIuranHtml() {
           <span class="kas-year-label">${year}</span>
           <button type="button" class="kas-year-btn" data-kas-year-shift="1" aria-label="Tahun Berikutnya">›</button>
         </div>
-        <span class="kas-period-pill">Bulanan</span>
+        <span class="kas-period-pill">Bulanan (Jan – Des)</span>
       </div>
     </div>
 
-    <div class="row-between">
-      <strong style="font-size: 14px;">Daftar Siswa (${activeStudents.length})</strong>
-      <div class="kas-legend">
-        <span><span class="kas-dot paid"></span>Lunas</span>
-        <span><span class="kas-dot unpaid"></span>Belum</span>
+    <!-- Tabel Iuran (Sama Seperti Tabel Absensi) -->
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h3 class="card-title">Tabel Iuran Tahun ${year}</h3>
+          <p class="card-desc">${activeStudents.length} siswa aktif · Nominal ${escapeHtml(formatRupiah(state.kas.settings.fee_amount))}/bulan</p>
+        </div>
+        <div class="kas-legend">
+          <span><span class="kas-dot paid"></span>Lunas (✓)</span>
+          <span><span class="kas-dot unpaid"></span>Belum (·)</span>
+        </div>
       </div>
-    </div>
-
-    <div class="stack-sm">
-      ${studentsHtml}
+      ${tableBodyHtml}
     </div>
   `;
 }
@@ -421,7 +454,6 @@ function renderFormHtml() {
       <span style="width: 68px;"></span>
     </div>
 
-    <!-- Switch Pemasukan (+) / Pengeluaran (-) -->
     <div class="kas-segment">
       <button
         type="button"
@@ -533,7 +565,6 @@ function renderLaporanHtml() {
   const year = state.kas.activeYear;
   const { totalIuran, totalTxIn, totalIn, totalOut, balance, combined } = computeKasSummary();
 
-  // Ringkasan arus kas per bulan pada tahun aktif
   const monthlyRows = MONTH_SHORT.map((label, idx) => {
     const mk = `${year}-${String(idx + 1).padStart(2, '0')}`;
     let masuk = 0;
@@ -810,7 +841,6 @@ function openAddKasCategoryModal(container) {
           state.kas.settings = updated;
           closeModal();
 
-          // Tambahkan opsi langsung ke select tanpa mereset isi form yang sedang diketik
           const select = container.querySelector('#kas-input-category');
           if (select) {
             const opt = document.createElement('option');
@@ -920,7 +950,7 @@ async function exportKasToExcel() {
   /* ---------- SHEET 2: BUKU KAS MASUK & KELUAR ---------- */
   const wsBuku = workbook.addWorksheet('Buku Kas');
   const { combined } = computeKasSummary();
-  const chronological = combined.slice().reverse(); // Urut lama ke baru untuk saldo berjalan
+  const chronological = combined.slice().reverse();
 
   const bukuHeaders = ['NO', 'TANGGAL', 'JENIS', 'KATEGORI', 'KETERANGAN', 'MASUK (Rp)', 'KELUAR (Rp)', 'SALDO (Rp)'];
   const titleRow2 = wsBuku.addRow([`BUKU KAS ${className}`]);
@@ -996,7 +1026,6 @@ async function exportKasToExcel() {
     { width: 16 },
   ];
 
-  // Unduh File
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -1026,7 +1055,6 @@ async function exportKasToExcel() {
 export function bindKasEvents(container) {
   if (!container) return;
 
-  // Format angka ribuan otomatis pada input nominal
   container.addEventListener('input', (e) => {
     const input = e.target;
     if (input && input.id === 'kas-input-amount') {
@@ -1037,7 +1065,6 @@ export function bindKasEvents(container) {
   container.addEventListener('click', async (e) => {
     const target = e.target;
 
-    // Navigasi antar sub-halaman Kas
     const navBtn = target.closest('[data-kas-nav]');
     if (navBtn) {
       state.kas.subView = navBtn.dataset.kasNav;
@@ -1046,7 +1073,6 @@ export function bindKasEvents(container) {
       return;
     }
 
-    // Buka form Kas Masuk / Kas Keluar dari Dasbor
     const formBtn = target.closest('[data-kas-open-form]');
     if (formBtn) {
       state.kas.formType = formBtn.dataset.kasOpenForm === 'out' ? 'out' : 'in';
@@ -1056,7 +1082,6 @@ export function bindKasEvents(container) {
       return;
     }
 
-    // Switch Pemasukan (+) / Pengeluaran (-) di dalam form
     const switchBtn = target.closest('[data-kas-switch-type]');
     if (switchBtn) {
       const nextType = switchBtn.dataset.kasSwitchType === 'out' ? 'out' : 'in';
@@ -1067,19 +1092,16 @@ export function bindKasEvents(container) {
       return;
     }
 
-    // Buka modal Pengaturan Nominal Iuran
     if (target.closest('[data-kas-open-settings]')) {
       openKasSettingsModal(container);
       return;
     }
 
-    // Buka modal + Tambah Kategori Kas
     if (target.closest('[data-kas-add-category]')) {
       openAddKasCategoryModal(container);
       return;
     }
 
-    // Ganti Tahun (< / >)
     const yearBtn = target.closest('[data-kas-year-shift]');
     if (yearBtn) {
       state.kas.activeYear += Number(yearBtn.dataset.kasYearShift);
@@ -1087,7 +1109,6 @@ export function bindKasEvents(container) {
       return;
     }
 
-    // Klik Transaksi Manual -> Buka Form Edit
     const editTxEl = target.closest('[data-kas-edit-tx]');
     if (editTxEl) {
       const tx = state.kas.transactions.find((t) => t.tx_id === editTxEl.dataset.kasEditTx);
@@ -1100,7 +1121,6 @@ export function bindKasEvents(container) {
       return;
     }
 
-    // Hapus Transaksi Manual
     const delTxBtn = target.closest('[data-kas-delete-tx]');
     if (delTxBtn) {
       const txId = delTxBtn.dataset.kasDeleteTx;
@@ -1123,18 +1143,17 @@ export function bindKasEvents(container) {
       return;
     }
 
-    // 1-Klik Bayar Iuran (Lunas instan / Konfirmasi saat batalkan)
-    const iuranBtn = target.closest('[data-kas-toggle-iuran]');
-    if (iuranBtn) {
-      if (iuranBtn.disabled) return;
-      const studentId = iuranBtn.dataset.studentId;
-      const monthKey = iuranBtn.dataset.monthKey;
-      const alreadyPaid = iuranBtn.dataset.paid === '1';
+    // 1-Klik Sel Tabel Iuran (Update langsung di sel tanpa mereset posisi scroll horizontal)
+    const iuranCell = target.closest('[data-kas-toggle-iuran]');
+    if (iuranCell) {
+      if (iuranCell.dataset.busy === '1') return;
+      const studentId = iuranCell.dataset.studentId;
+      const monthKey = iuranCell.dataset.monthKey;
+      const alreadyPaid = iuranCell.dataset.paid === '1';
 
       if (!alreadyPaid) {
-        // 1-Klik langsung Lunas
-        iuranBtn.disabled = true;
-        iuranBtn.classList.add('is-busy');
+        iuranCell.dataset.busy = '1';
+        iuranCell.style.opacity = '0.5';
         try {
           const res = await api.toggleKasIuran({
             student_id: studentId,
@@ -1146,15 +1165,17 @@ export function bindKasEvents(container) {
             state.kas.iuran = state.kas.iuran.filter((r) => r.iuran_key !== res.record.iuran_key);
             state.kas.iuran.push(res.record);
           }
-          renderKasView(container);
+          iuranCell.dataset.paid = '1';
+          iuranCell.innerHTML = renderIuranBadgeHtml(true);
+          updateRowPaidCount(iuranCell, studentId);
           showToast(`Lunas: ${getStudentNameById(studentId)} (${formatMonthShortYear(monthKey)})`, 'success');
         } catch (err) {
-          iuranBtn.disabled = false;
-          iuranBtn.classList.remove('is-busy');
           showToast(err.message, 'error');
+        } finally {
+          delete iuranCell.dataset.busy;
+          iuranCell.style.opacity = '';
         }
       } else {
-        // Konfirmasi sebelum membatalkan lunas (mencegah salah ketuk saat scroll)
         openConfirmModal({
           title: 'Batalkan Status Lunas?',
           message: `Batalkan pembayaran iuran ${getStudentNameById(studentId)} untuk bulan ${formatMonthShortYear(monthKey)}? Saldo kas akan dikurangi kembali.`,
@@ -1166,7 +1187,9 @@ export function bindKasEvents(container) {
               paid: false,
             });
             state.kas.iuran = state.kas.iuran.filter((r) => r.iuran_key !== res.iuran_key);
-            renderKasView(container);
+            iuranCell.dataset.paid = '0';
+            iuranCell.innerHTML = renderIuranBadgeHtml(false);
+            updateRowPaidCount(iuranCell, studentId);
             showToast('Status lunas dibatalkan.');
           },
         });
@@ -1174,7 +1197,6 @@ export function bindKasEvents(container) {
       return;
     }
 
-    // Download Laporan Kas Excel (2 Sheet)
     if (target.closest('[data-kas-export-excel]')) {
       setLoading(true, 'Menyiapkan laporan Excel...');
       try {
@@ -1188,7 +1210,6 @@ export function bindKasEvents(container) {
     }
   });
 
-  // Submit Form Kas Masuk / Kas Keluar
   container.addEventListener('submit', async (e) => {
     const form = e.target;
     if (!form || form.id !== 'kas-tx-form') return;
