@@ -45,6 +45,7 @@ import { STORAGE_KEYS } from './config.js';
  * @property {number} fee_amount
  * @property {string[]} categories_in
  * @property {string[]} categories_out
+ * @property {Record<string, number[]>} months_by_year
  */
 
 /**
@@ -103,7 +104,7 @@ export const state = {
   /** @type {Map<string, PendingAttendanceChange>} */
   pendingQueue: new Map(),
 
-  // State Modul Kas (V2)
+  // State Modul Kas (V2.1)
   kas: {
     loaded: false,
     /** @type {'dashboard' | 'iuran' | 'form' | 'laporan'} */
@@ -119,6 +120,7 @@ export const state = {
       fee_amount: 20000,
       categories_in: ['Donasi & Sukarela', 'Sisa Kegiatan', 'Lainnya'],
       categories_out: ['Konsumsi', 'Perlengkapan', 'Kegiatan', 'Lainnya'],
+      months_by_year: {},
     },
     /** @type {KasIuranRecord[]} */
     iuran: [],
@@ -180,7 +182,6 @@ export function setMonthData(monthKey, data) {
 }
 
 /**
- * Memuat data modul Kas dari endpoint getKasData.
  * @param {{ kasSettings: KasSettings, iuran: KasIuranRecord[], transactions: KasTransaction[] }} data
  */
 export function setKasData(data) {
@@ -194,6 +195,10 @@ export function setKasData(data) {
       categories_out: Array.isArray(data.kasSettings.categories_out)
         ? data.kasSettings.categories_out
         : ['Konsumsi', 'Perlengkapan', 'Kegiatan', 'Lainnya'],
+      months_by_year:
+        data.kasSettings.months_by_year && typeof data.kasSettings.months_by_year === 'object'
+          ? data.kasSettings.months_by_year
+          : {},
     };
   }
   state.kas.iuran = Array.isArray(data.iuran) ? data.iuran : [];

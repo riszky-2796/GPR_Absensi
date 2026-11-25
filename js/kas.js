@@ -11,6 +11,7 @@ import {
 } from './ui.js';
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
 const THIN_BORDER = {
   top: { style: 'thin', color: { argb: EXCEL_COLORS.BORDER_BLACK } },
@@ -49,14 +50,14 @@ function getTodayIso() {
   return `${y}-${m}-${day}`;
 }
 
-/** @param {string} isoStr YYYY-MM-DD atau ISO timestamp */
+/** @param {string} isoStr */
 function extractDatePart(isoStr) {
   if (!isoStr) return getTodayIso();
   const match = String(isoStr).match(/^(\d{4}-\d{2}-\d{2})/);
   return match ? match[1] : getTodayIso();
 }
 
-/** @param {string} isoDate YYYY-MM-DD */
+/** @param {string} isoDate */
 function formatDateId(isoDate) {
   const part = extractDatePart(isoDate);
   const [y, m, d] = part.split('-').map(Number);
@@ -64,7 +65,7 @@ function formatDateId(isoDate) {
   return `${String(d || 1).padStart(2, '0')} ${mon} ${y}`;
 }
 
-/** @param {string} monthKey YYYY-MM */
+/** @param {string} monthKey */
 function formatMonthShortYear(monthKey) {
   const [y, m] = String(monthKey).split('-');
   const mon = MONTH_SHORT[Number(m) - 1] || m;
@@ -77,6 +78,39 @@ function getStudentNameById(studentId) {
   return found ? found.name : 'Siswa';
 }
 
+/**
+ * Mengembalikan daftar angka bulan aktif (1..12) untuk tahun tertentu.
+ * Default seluruh 12 bulan jika tahun tersebut belum dikustomisasi.
+ * @param {number} year
+ * @returns {number[]}
+ */
+function getActiveMonthsForYear(year) {
+  const map = state.kas.settings.months_by_year || {};
+  const saved = map[String(year)];
+  if (Array.isArray(saved) && saved.length > 0) {
+    const clean = Array.from(
+      new Set(saved.map(Number).filter((m) => m >= 1 && m <= 12))
+    ).sort((a, b) => a - b);
+    if (clean.length > 0) return clean;
+  }
+  return ALL_MONTHS.slice();
+}
+
+/**
+ * Membuat label ringkas rentang bulan aktif (contoh: "Jul – Des (6 Bln)").
+ * @param {number[]} months
+ * @returns {string}
+ */
+function formatActiveMonthsLabel(months) {
+  if (!months.length || months.length === 12) return 'Jan – Des (12 Bln)';
+  if (months.length === 1) return `${MONTH_SHORT[months[0] - 1]} (1 Bln)`;
+  const isContiguous = months[months.length - 1] - months[0] === months.length - 1;
+  if (isContiguous) {
+    return `${MONTH_SHORT[months[0] - 1]} – ${MONTH_SHORT[months[months.length - 1] - 1]} (${months.length} Bln)`;
+  }
+  return `${months.length} Bulan Aktif`;
+}
+
 /** @param {boolean} isPaid */
 function renderIuranBadgeHtml(isPaid) {
   if (isPaid) {
@@ -86,22 +120,24 @@ function renderIuranBadgeHtml(isPaid) {
 }
 
 /**
- * Memperbarui angka kolom LUNAS (X/12) pada 1 baris siswa tanpa merender ulang seluruh tabel.
+ * Memperbarui angka kolom LUNAS (X/N) pada 1 baris siswa tanpa merender ulang seluruh tabel.
  * @param {HTMLElement} cellEl
  * @param {string} studentId
  */
 function updateRowPaidCount(cellEl, studentId) {
   const countCell = cellEl.closest('tr')?.querySelector('[data-kas-student-count]');
   if (!countCell) return;
-  const yearPrefix = `${state.kas.activeYear}-`;
-  const count = state.kas.iuran.filter(
-    (r) => r.student_id === studentId && r.month_key.startsWith(yearPrefix)
-  ).length;
-  countCell.innerHTML = `<strong>${count}/12</strong>`;
+  const year = state.kas.activeYear;
+  const activeMonths = getActiveMonthsForYear(year);
+  const activeKeySet = new Set(
+    activeMonths.map((m) => `${studentId}|${year}-${String(m).padStart(2, '0')}`)
+  );
+  const count = state.kas.iuran.filter((r) => activeKeySet.has(r.iuran_key)).length;
+  countCell.innerHTML = `<strong>${count}/${activeMonths.length}</strong>`;
 }
 
 /**
- * Menghitung saldo total, pemasukan, pengeluaran, dan gabungan arus transaksi (Single Source of Truth).
+ * Menghitung saldo total, pemasukan, pengeluaran, dan gabungan arus transaksi.
  */
 function computeKasSummary() {
   let totalIuran = 0;
@@ -165,6 +201,8 @@ function computeKasSummary() {
 function renderDashboardHtml() {
   const { totalIn, totalOut, balance, combined } = computeKasSummary();
   const recent = combined.slice(0, 15);
+  const year = state.kas.activeYear;
+  const activeMonthsLabel = formatActiveMonthsLabel(getActiveMonthsForYear(year));
 
   const txListHtml =
     recent.length === 0
@@ -206,7 +244,6 @@ function renderDashboardHtml() {
       `;
 
   return `
-    <!-- Kartu Hero Saldo Kas -->
     <div class="kas-hero">
       <div class="kas-hero-top">
         <span class="kas-hero-label">Saldo Kas Saat Ini</span>
@@ -231,7 +268,6 @@ function renderDashboardHtml() {
       </div>
     </div>
 
-    <!-- 3 Tombol Aksi Cepat -->
     <div class="kas-quick-grid">
       <button type="button" class="kas-quick-btn" data-kas-nav="iuran">
         <span class="kas-quick-icon iuran" aria-hidden="true">✓</span>
@@ -247,7 +283,6 @@ function renderDashboardHtml() {
       </button>
     </div>
 
-    <!-- Menu Pengelolaan (Ringkas) -->
     <div>
       <div class="kas-section-label">Menu Pengelolaan</div>
       <div class="card kas-menu-card">
@@ -255,8 +290,8 @@ function renderDashboardHtml() {
           <div class="kas-menu-left">
             <span class="kas-menu-badge blue" aria-hidden="true">⚙</span>
             <div>
-              <div class="kas-menu-title">Atur Nominal Iuran</div>
-              <div class="kas-menu-sub">${escapeHtml(state.kas.settings.title)} · ${escapeHtml(formatRupiah(state.kas.settings.fee_amount))}/bln</div>
+              <div class="kas-menu-title">Atur Iuran &amp; Bulan Aktif</div>
+              <div class="kas-menu-sub">${escapeHtml(formatRupiah(state.kas.settings.fee_amount))}/bln · ${escapeHtml(activeMonthsLabel)} (${year})</div>
             </div>
           </div>
           <span class="kas-chevron" aria-hidden="true">›</span>
@@ -275,7 +310,6 @@ function renderDashboardHtml() {
       </div>
     </div>
 
-    <!-- Transaksi Terbaru -->
     <div>
       <div class="row-between" style="margin-bottom: 8px;">
         <div class="kas-section-label" style="margin: 0;">Transaksi Terbaru</div>
@@ -294,6 +328,8 @@ function renderDashboardHtml() {
 
 function renderIuranHtml() {
   const year = state.kas.activeYear;
+  const activeMonths = getActiveMonthsForYear(year);
+  const periodLabel = formatActiveMonthsLabel(activeMonths);
   const activeStudents = state.students.filter((s) => s.is_active);
   const paidSet = new Set(state.kas.iuran.map((r) => r.iuran_key));
 
@@ -310,40 +346,43 @@ function renderIuranHtml() {
       </div>
     `;
   } else {
-    const monthHeaders = MONTH_SHORT.map(
-      (label) => `<th class="col-date">${escapeHtml(label.toUpperCase())}</th>`
-    ).join('');
+    const monthHeaders = activeMonths
+      .map((m) => `<th class="col-date">${escapeHtml(MONTH_SHORT[m - 1].toUpperCase())}</th>`)
+      .join('');
 
     const studentRows = activeStudents
       .map((student, index) => {
         let paidCountYear = 0;
 
-        const monthCells = MONTH_SHORT.map((label, mIdx) => {
-          const mm = String(mIdx + 1).padStart(2, '0');
-          const monthKey = `${year}-${mm}`;
-          const isPaid = paidSet.has(`${student.student_id}|${monthKey}`);
-          if (isPaid) paidCountYear++;
+        const monthCells = activeMonths
+          .map((m) => {
+            const label = MONTH_SHORT[m - 1];
+            const mm = String(m).padStart(2, '0');
+            const monthKey = `${year}-${mm}`;
+            const isPaid = paidSet.has(`${student.student_id}|${monthKey}`);
+            if (isPaid) paidCountYear++;
 
-          return `
-            <td
-              class="absen-cell"
-              data-kas-toggle-iuran
-              data-student-id="${escapeHtml(student.student_id)}"
-              data-month-key="${escapeHtml(monthKey)}"
-              data-paid="${isPaid ? '1' : '0'}"
-              title="${escapeHtml(student.name)} — ${label} ${year}"
-            >
-              ${renderIuranBadgeHtml(isPaid)}
-            </td>
-          `;
-        }).join('');
+            return `
+              <td
+                class="absen-cell"
+                data-kas-toggle-iuran
+                data-student-id="${escapeHtml(student.student_id)}"
+                data-month-key="${escapeHtml(monthKey)}"
+                data-paid="${isPaid ? '1' : '0'}"
+                title="${escapeHtml(student.name)} — ${label} ${year}"
+              >
+                ${renderIuranBadgeHtml(isPaid)}
+              </td>
+            `;
+          })
+          .join('');
 
         return `
           <tr>
             <td class="sticky-col-no">${index + 1}</td>
             <td class="sticky-col-name" title="${escapeHtml(student.name)}">${escapeHtml(student.name)}</td>
             ${monthCells}
-            <td data-kas-student-count><strong>${paidCountYear}/12</strong></td>
+            <td data-kas-student-count><strong>${paidCountYear}/${activeMonths.length}</strong></td>
           </tr>
         `;
       })
@@ -378,7 +417,6 @@ function renderIuranHtml() {
       <span style="width: 68px;"></span>
     </div>
 
-    <!-- Banner Info Tagihan & Pilih Tahun -->
     <div class="kas-iuran-banner">
       <div class="kas-iuran-banner-top">
         <div>
@@ -389,8 +427,8 @@ function renderIuranHtml() {
           type="button"
           class="kas-banner-icon-btn"
           data-kas-open-settings
-          title="Ubah Judul & Nominal Iuran"
-          aria-label="Ubah Nominal Iuran"
+          title="Ubah Nominal & Bulan Aktif"
+          aria-label="Ubah Nominal & Bulan Aktif"
         >⚙</button>
       </div>
 
@@ -400,11 +438,10 @@ function renderIuranHtml() {
           <span class="kas-year-label">${year}</span>
           <button type="button" class="kas-year-btn" data-kas-year-shift="1" aria-label="Tahun Berikutnya">›</button>
         </div>
-        <span class="kas-period-pill">Bulanan (Jan – Des)</span>
+        <span class="kas-period-pill">${escapeHtml(periodLabel)}</span>
       </div>
     </div>
 
-    <!-- Tabel Iuran (Sama Seperti Tabel Absensi) -->
     <div class="card">
       <div class="card-header">
         <div>
@@ -563,6 +600,7 @@ function renderFormHtml() {
 
 function renderLaporanHtml() {
   const year = state.kas.activeYear;
+  const activeMonths = getActiveMonthsForYear(year);
   const { totalIuran, totalTxIn, totalIn, totalOut, balance, combined } = computeKasSummary();
 
   const monthlyRows = MONTH_SHORT.map((label, idx) => {
@@ -655,7 +693,10 @@ function renderLaporanHtml() {
       <div class="card-header">
         <div>
           <h3 class="card-title">Ringkasan Kas Total</h3>
-          <p class="card-desc">Iuran Siswa: ${escapeHtml(formatRupiah(totalIuran))} · Kas Masuk Lain: ${escapeHtml(formatRupiah(totalTxIn))}</p>
+          <p class="card-desc">
+            Iuran Siswa: ${escapeHtml(formatRupiah(totalIuran))} · Kas Masuk Lain: ${escapeHtml(formatRupiah(totalTxIn))}
+            · Periode Ekspor ${year}: <b>${escapeHtml(formatActiveMonthsLabel(activeMonths))}</b>
+          </p>
         </div>
         <div class="row-wrap">
           <div class="month-picker">
@@ -723,6 +764,24 @@ export function renderKasView(container) {
 
 /** @param {HTMLElement} container */
 function openKasSettingsModal(container) {
+  let modalYear = state.kas.activeYear;
+
+  /** @type {Record<string, number[]>} */
+  const draftMap = {};
+  Object.entries(state.kas.settings.months_by_year || {}).forEach(([yr, list]) => {
+    if (Array.isArray(list) && list.length > 0) {
+      draftMap[yr] = list.slice();
+    }
+  });
+
+  function getDraftMonths(yr) {
+    const key = String(yr);
+    if (Array.isArray(draftMap[key]) && draftMap[key].length > 0) {
+      return draftMap[key];
+    }
+    return ALL_MONTHS.slice();
+  }
+
   openModal({
     title: 'Pengaturan Iuran Kas',
     bodyHtml: `
@@ -738,6 +797,7 @@ function openKasSettingsModal(container) {
             required
           />
         </div>
+
         <div class="form-group">
           <label class="form-label" for="kas-set-fee">Nominal Tagihan per Bulan (Rp)</label>
           <div class="kas-nominal-box">
@@ -753,6 +813,31 @@ function openKasSettingsModal(container) {
           </div>
           <p class="helper-text">Perubahan nominal hanya berlaku untuk pembayaran baru ke depan (saldo lama tetap aman).</p>
         </div>
+
+        <hr class="divider" />
+
+        <div class="form-group" style="margin-bottom: 0;">
+          <div class="row-between" style="margin-bottom: 8px;">
+            <label class="form-label" style="margin: 0;">Bulan Aktif Iuran</label>
+            <div class="month-picker">
+              <button type="button" class="icon-btn" id="kas-modal-yr-prev" style="min-width: 30px; min-height: 30px;" aria-label="Tahun Sebelumnya">‹</button>
+              <span id="kas-modal-yr-label" style="font-weight: 700; min-width: 48px; text-align: center;">${modalYear}</span>
+              <button type="button" class="icon-btn" id="kas-modal-yr-next" style="min-width: 30px; min-height: 30px;" aria-label="Tahun Berikutnya">›</button>
+            </div>
+          </div>
+
+          <div
+            id="kas-modal-months-grid"
+            class="day-toggle-grid"
+            style="grid-template-columns: repeat(4, 1fr); gap: 6px;"
+          ></div>
+
+          <div class="row-between" style="margin-top: 8px;">
+            <span id="kas-modal-months-summary" class="helper-text" style="margin: 0;"></span>
+            <button type="button" class="kas-add-cat-btn" id="kas-modal-select-all">Pilih Semua</button>
+          </div>
+          <p class="helper-text">Bulan yang aktif otomatis diterapkan pada Tabel Iuran dan file unduhan Excel untuk tahun tersebut.</p>
+        </div>
       </form>
     `,
     footerHtml: `
@@ -763,10 +848,71 @@ function openKasSettingsModal(container) {
       const form = card.querySelector('#kas-settings-form');
       const titleInput = card.querySelector('#kas-set-title');
       const feeInput = card.querySelector('#kas-set-fee');
+      const yrLabel = card.querySelector('#kas-modal-yr-label');
+      const monthsGrid = card.querySelector('#kas-modal-months-grid');
+      const summaryEl = card.querySelector('#kas-modal-months-summary');
       const btn = card.querySelector('#kas-set-submit');
+
+      function renderMonthButtons() {
+        const selected = getDraftMonths(modalYear);
+        const selectedSet = new Set(selected);
+        yrLabel.textContent = String(modalYear);
+        summaryEl.textContent = `Aktif (${modalYear}): ${formatActiveMonthsLabel(selected)}`;
+
+        monthsGrid.innerHTML = MONTH_SHORT.map((name, idx) => {
+          const mNum = idx + 1;
+          return `
+            <button
+              type="button"
+              class="day-toggle-btn ${selectedSet.has(mNum) ? 'selected' : ''}"
+              data-kas-modal-month="${mNum}"
+              style="min-height: 36px;"
+            >
+              ${name}
+            </button>
+          `;
+        }).join('');
+      }
+
+      renderMonthButtons();
 
       feeInput.addEventListener('input', () => {
         feeInput.value = formatDots(feeInput.value);
+      });
+
+      card.querySelector('#kas-modal-yr-prev').addEventListener('click', () => {
+        modalYear -= 1;
+        renderMonthButtons();
+      });
+
+      card.querySelector('#kas-modal-yr-next').addEventListener('click', () => {
+        modalYear += 1;
+        renderMonthButtons();
+      });
+
+      card.querySelector('#kas-modal-select-all').addEventListener('click', () => {
+        draftMap[String(modalYear)] = ALL_MONTHS.slice();
+        renderMonthButtons();
+      });
+
+      monthsGrid.addEventListener('click', (e) => {
+        const mBtn = e.target.closest('[data-kas-modal-month]');
+        if (!mBtn) return;
+        const mNum = Number(mBtn.dataset.kasModalMonth);
+        const current = getDraftMonths(modalYear);
+        const exists = current.includes(mNum);
+
+        if (exists && current.length <= 1) {
+          showToast('Minimal 1 bulan harus aktif dalam satu tahun.', 'error');
+          return;
+        }
+
+        const next = exists
+          ? current.filter((m) => m !== mNum)
+          : [...current, mNum].sort((a, b) => a - b);
+
+        draftMap[String(modalYear)] = next;
+        renderMonthButtons();
       });
 
       form.addEventListener('submit', async (e) => {
@@ -777,11 +923,15 @@ function openKasSettingsModal(container) {
         btn.disabled = true;
         btn.textContent = 'Menyimpan...';
         try {
-          const updated = await api.saveKasSettings({ title, fee_amount: fee });
+          const updated = await api.saveKasSettings({
+            title,
+            fee_amount: fee,
+            months_by_year: draftMap,
+          });
           state.kas.settings = updated;
           closeModal();
           renderKasView(container);
-          showToast('Pengaturan nominal iuran tersimpan.', 'success');
+          showToast('Pengaturan iuran & bulan aktif tersimpan.', 'success');
         } catch (err) {
           btn.disabled = false;
           btn.textContent = 'Simpan';
@@ -868,10 +1018,13 @@ async function exportKasToExcel() {
   }
 
   const year = state.kas.activeYear;
+  const activeMonths = getActiveMonthsForYear(year);
+  const activeLabels = activeMonths.map((m) => MONTH_SHORT[m - 1].toUpperCase());
+  const periodTitle = formatActiveMonthsLabel(activeMonths).toUpperCase();
   const className = String(state.settings.class_name || 'GPR ABSENSI').toUpperCase();
   const workbook = new window.ExcelJS.Workbook();
 
-  /* ---------- SHEET 1: REKAP IURAN SISWA ---------- */
+  /* ---------- SHEET 1: REKAP IURAN SISWA (SESUAI BULAN AKTIF TAHUN TERPILIH) ---------- */
   const wsIuran = workbook.addWorksheet(`Rekap Iuran ${year}`);
   const activeStudents = state.students.filter((s) => s.is_active);
   const iuranMap = {};
@@ -879,10 +1032,10 @@ async function exportKasToExcel() {
     iuranMap[r.iuran_key] = r;
   });
 
-  const iuranHeaders = ['NO', 'NAMA SISWA', ...MONTH_SHORT.map((m) => m.toUpperCase()), 'TOTAL LUNAS', 'TOTAL BAYAR (Rp)'];
+  const iuranHeaders = ['NO', 'NAMA SISWA', ...activeLabels, 'TOTAL LUNAS', 'TOTAL BAYAR (Rp)'];
   const totalCols1 = iuranHeaders.length;
 
-  const titleRow1 = wsIuran.addRow([`REKAP IURAN KAS ${className} TAHUN ${year}`]);
+  const titleRow1 = wsIuran.addRow([`REKAP IURAN KAS ${className} TAHUN ${year} (${periodTitle})`]);
   wsIuran.mergeCells(1, 1, 1, totalCols1);
   titleRow1.height = 26;
   titleRow1.getCell(1).font = { name: 'Calibri', size: 12, bold: true };
@@ -901,8 +1054,8 @@ async function exportKasToExcel() {
   activeStudents.forEach((student, idx) => {
     let countPaid = 0;
     let sumPaid = 0;
-    const monthCells = MONTH_SHORT.map((_, mIdx) => {
-      const mk = `${year}-${String(mIdx + 1).padStart(2, '0')}`;
+    const monthCells = activeMonths.map((m) => {
+      const mk = `${year}-${String(m).padStart(2, '0')}`;
       const rec = iuranMap[`${student.student_id}|${mk}`];
       if (rec) {
         countPaid++;
@@ -913,21 +1066,30 @@ async function exportKasToExcel() {
     });
 
     grandTotalIuranYear += sumPaid;
-    const row = wsIuran.addRow([idx + 1, student.name, ...monthCells, `${countPaid}/12`, sumPaid]);
+    const row = wsIuran.addRow([
+      idx + 1,
+      student.name,
+      ...monthCells,
+      `${countPaid}/${activeMonths.length}`,
+      sumPaid,
+    ]);
     row.height = 21;
     const bg = idx % 2 === 0 ? EXCEL_COLORS.ZEBRA_ODD_BG : EXCEL_COLORS.ZEBRA_EVEN_BG;
 
     row.eachCell((cell, colNum) => {
       cell.font = { name: 'Calibri', size: 11 };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-      cell.alignment = { vertical: 'middle', horizontal: colNum === 2 ? 'left' : colNum === totalCols1 ? 'right' : 'center' };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: colNum === 2 ? 'left' : colNum === totalCols1 ? 'right' : 'center',
+      };
       cell.border = THIN_BORDER;
       if (colNum === totalCols1) cell.numFmt = '#,##0';
     });
   });
 
   const foot1 = new Array(totalCols1).fill('');
-  foot1[0] = `TOTAL IURAN TERKUMPUL TAHUN ${year}`;
+  foot1[0] = `TOTAL IURAN TERKUMPUL TAHUN ${year} (${periodTitle})`;
   foot1[totalCols1 - 1] = grandTotalIuranYear;
   const footRow1 = wsIuran.addRow(foot1);
   wsIuran.mergeCells(footRow1.number, 1, footRow1.number, totalCols1 - 1);
@@ -942,7 +1104,7 @@ async function exportKasToExcel() {
   wsIuran.columns = [
     { width: 6 },
     { width: 28 },
-    ...MONTH_SHORT.map(() => ({ width: 7 })),
+    ...activeMonths.map(() => ({ width: 7 })),
     { width: 13 },
     { width: 18 },
   ];
@@ -1143,7 +1305,6 @@ export function bindKasEvents(container) {
       return;
     }
 
-    // 1-Klik Sel Tabel Iuran (Update langsung di sel tanpa mereset posisi scroll horizontal)
     const iuranCell = target.closest('[data-kas-toggle-iuran]');
     if (iuranCell) {
       if (iuranCell.dataset.busy === '1') return;
